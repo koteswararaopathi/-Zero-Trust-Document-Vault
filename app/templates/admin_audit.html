@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Immutable Audit Stream - TrustVault{% endblock %}
+
+{% block content %}
+<div class="card-header" style="border: none; padding-bottom: 0; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.85rem; font-weight: 800; display: flex; align-items: center; gap: 0.75rem;">
+      <span>🛡️ Tamper-Resistant Audit Trail</span>
+    </h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">
+      Cryptographically chained SHA-256 telemetry ledger. Accessible strictly by Administrators.
+    </p>
+  </div>
+</div>
+
+<!-- Cryptographic Integrity Banner -->
+{% if integrity.valid %}
+<div class="integrity-banner verified" id="integrityBanner">
+  <div>
+    <div class="integrity-status-title" style="color: #34d399;">
+      <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+      </svg>
+      CRYPTOGRAPHIC INTEGRITY VERIFIED
+    </div>
+    <p class="integrity-status-desc">
+      {{ integrity.message }}
+      {% if integrity.count > 0 %}
+        Ledger Head: <span class="mono" style="color: var(--accent-cyan);">{{ integrity.head_hash|short_hash }}</span>
+      {% endif %}
+    </p>
+  </div>
+
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn btn-primary btn-sm" onclick="runLiveVerification(this)" id="btn-verify-chain">
+      ⚡ Verify Chain Now
+    </button>
+  </div>
+</div>
+{% else %}
+<div class="integrity-banner tampered" id="integrityBanner">
+  <div>
+    <div class="integrity-status-title" style="color: #f43f5e;">
+      <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+      </svg>
+      TAMPER DETECTED: AUDIT LEDGER COMPROMISED
+    </div>
+    <p class="integrity-status-desc" style="color: #fecdd3;">
+      {{ integrity.reason }}
+    </p>
+  </div>
+
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <form method="POST" action="{{ url_for('admin.recalculate_chain') }}">
+      <button type="submit" class="btn btn-secondary btn-sm" style="color: #34d399; border-color: rgba(16, 185, 129, 0.4);">
+        🔧 Re-synchronize Chain
+      </button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<!-- Security Lab Testing Tools for Evaluation -->
+<div class="card" style="background: rgba(10, 14, 24, 0.6); border: 1px dashed rgba(255, 255, 255, 0.12);">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">Security Lab Controls</h3>
+      <p style="font-size: 0.8rem; color: var(--text-muted);">
+        Test audit chain resilience against out-of-band database injection or modification attacks.
+      </p>
+    </div>
+
+    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+      <form method="POST" action="{{ url_for('admin.simulate_tamper') }}">
+        <button type="submit" class="btn btn-danger btn-sm" id="btn-simulate-tamper">
+          🧪 Simulate Out-of-Band Tamper
+        </button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.recalculate_chain') }}">
+        <button type="submit" class="btn btn-secondary btn-sm" id="btn-restore-chain">
+          🔄 Restore Chain Hashes
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Audit Log Stream Table -->
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">
+      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+      </svg>
+      Immutable Telemetry Entries ({{ logs|length }})
+    </h2>
+    <span style="font-size: 0.8rem; color: var(--text-dim);">
+      Chaining Rule: <code class="mono" style="color: var(--accent-cyan);">SHA256(user_id|action|timestamp|prev_hash)</code>
+    </span>
+  </div>
+
+  {% if logs %}
+  <div class="table-responsive">
+    <table class="table" id="audit-table">
+      <thead>
+        <tr>
+          <th>Block #</th>
+          <th>Timestamp (UTC)</th>
+          <th>Actor</th>
+          <th>Action</th>
+          <th>Target Doc</th>
+          <th>IP Address</th>
+          <th>HTTP Status</th>
+          <th>Previous Hash (Chained)</th>
+          <th>Current Entry Hash</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td><span class="mono">#{{ log.id }}</span></td>
+          <td style="font-size: 0.8rem; color: var(--text-muted);"><span class="mono">{{ log.timestamp_str }}</span></td>
+          <td>
+            {% if log.user %}
+              <span class="badge badge-{{ log.user.role.lower() }}">{{ log.user.username }}</span>
+            {% else %}
+              <span style="color: var(--text-dim); font-size: 0.8rem;">Anonymous</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge badge-{{ log.action_type }}">{{ log.action_type }}</span>
+          </td>
+          <td>
+            {% if log.target_document_id %}
+              <span class="mono">Doc #{{ log.target_document_id }}</span>
+            {% else %}
+              <span style="color: var(--text-dim);">-</span>
+            {% endif %}
+          </td>
+          <td><span class="mono" style="font-size: 0.8rem;">{{ log.ip_address }}</span></td>
+          <td>
+            <span class="mono" style="font-size: 0.85rem; font-weight: 700; color: {% if log.status_code == 200 or log.status_code == 201 %}#34d399{% elif log.status_code == 403 %}#f43f5e{% else %}#fbbf24{% endif %};">
+              {{ log.status_code }}
+            </span>
+          </td>
+          <td>
+            <span class="hash-pill" title="Previous SHA-256 block hash" onclick="copyToClipboard('{{ log.prev_hash }}', this)" style="cursor: pointer;">
+              {{ log.prev_hash|short_hash }}
+            </span>
+          </td>
+          <td>
+            <span class="hash-pill" title="Cryptographic Entry Hash" onclick="copyToClipboard('{{ log.entry_hash }}', this)" style="cursor: pointer; border-color: rgba(0, 240, 255, 0.25);">
+              {{ log.entry_hash|short_hash }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align: center; padding: 3rem 1rem; color: var(--text-dim);">
+    <p>Audit stream is currently empty.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

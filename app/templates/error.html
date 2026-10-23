@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - TrustVault{% endblock %}
+
+{% block content %}
+<div style="max-width: 560px; margin: 3rem auto; text-align: center;">
+  <div class="card" style="padding: 3rem 2rem; border-color: {% if code == 403 %}rgba(244, 63, 94, 0.4){% else %}var(--border-color){% endif %};">
+    <div style="font-size: 3.5rem; margin-bottom: 1rem;">
+      {% if code == 403 %}
+        🚫
+      {% elif code == 401 %}
+        🔒
+      {% elif code == 404 %}
+        🔍
+      {% else %}
+        ⚠️
+      {% endif %}
+    </div>
+
+    <h1 style="font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; color: {% if code == 403 %}#fb7185{% else %}var(--text-main){% endif %};">
+      {{ title }}
+    </h1>
+
+    <p style="color: var(--text-muted); font-size: 1rem; margin-bottom: 2rem;">
+      {{ description }}
+    </p>
+
+    {% if code == 403 %}
+      <div style="background: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 63, 94, 0.25); border-radius: 8px; padding: 0.85rem; margin-bottom: 2rem; font-size: 0.85rem; color: #fda4af;">
+        <strong>Server-Side RBAC Interception:</strong> This access violation attempt has been permanently recorded in the cryptographic audit ledger (<code class="mono">ACCESS_DENIED</code>).
+      </div>
+    {% endif %}
+
+    <div style="display: flex; justify-content: center; gap: 1rem;">
+      <a href="{{ url_for('routes.dashboard') if current_user else url_for('auth.login') }}" class="btn btn-primary">
+        Return to Dashboard
+      </a>
+      {% if not current_user %}
+        <a href="{{ url_for('auth.login') }}" class="btn btn-secondary">
+          Sign In
+        </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

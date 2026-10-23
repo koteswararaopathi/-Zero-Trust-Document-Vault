@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}TrustVault{% endblock %} | Secure Document Management & Tamper-Resistant Audit</title>
+  <meta name="description" content="TrustVault is an enterprise document security platform featuring server-side RBAC, IDOR elimination, and cryptographic SHA-256 audit chaining.">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+  <!-- Demo Role Switcher Toolbar for Fast Testing & Assessment -->
+  <div class="demo-banner">
+    <div class="demo-container">
+      <div>
+        <strong>TrustVault RBAC Lab:</strong> Switch authenticated session persona instantly:
+      </div>
+      <div class="demo-buttons">
+        <a href="{{ url_for('auth.quick_login', username='admin') }}" class="demo-btn">
+          <span class="badge badge-admin">Admin</span>
+        </a>
+        <a href="{{ url_for('auth.quick_login', username='alice') }}" class="demo-btn">
+          <span class="badge badge-owner">Owner (Alice)</span>
+        </a>
+        <a href="{{ url_for('auth.quick_login', username='bob') }}" class="demo-btn">
+          <span class="badge badge-viewer">Viewer (Bob)</span>
+        </a>
+        <a href="{{ url_for('auth.quick_login', username='charlie') }}" class="demo-btn">
+          <span class="badge badge-owner">Owner (Charlie - IDOR Target)</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Primary Navigation -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="{{ url_for('routes.dashboard') if current_user else url_for('auth.login') }}" class="brand-logo" id="nav-brand">
+        <div class="brand-icon">
+          <svg fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 1.944A11.954 11.954 0 012.166 5C2.056 5.649 2 6.319 2 7c0 5.225 3.34 9.67 8 11.317C14.66 16.67 18 12.225 18 7c0-.682-.057-1.35-.166-2.001A11.954 11.954 0 0110 1.944zM11 14a1 1 0 11-2 0 1 1 0 012 0zm0-7a1 1 0 10-2 0v3a1 1 0 102 0V7z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <span>TrustVault</span>
+      </a>
+
+      <ul class="nav-links">
+        {% if current_user %}
+          <li>
+            <a href="{{ url_for('routes.dashboard') }}" class="nav-link" id="nav-dashboard">Documents</a>
+          </li>
+
+          {% if current_user.is_admin %}
+            <li>
+              <a href="{{ url_for('admin.audit_logs') }}" class="nav-link admin-tab" id="nav-admin-audit">
+                🛡️ Audit Stream & Telemetry
+              </a>
+            </li>
+          {% endif %}
+
+          <li class="user-meta">
+            <span class="user-name">{{ current_user.username }}</span>
+            <span class="badge badge-{{ current_user.role.lower() }}">{{ current_user.role }}</span>
+          </li>
+
+          <li>
+            <a href="{{ url_for('auth.logout') }}" class="nav-link" id="nav-logout">Logout</a>
+          </li>
+        {% else %}
+          <li><a href="{{ url_for('auth.login') }}" class="nav-link" id="nav-login">Login</a></li>
+          <li><a href="{{ url_for('auth.register') }}" class="nav-link" id="nav-register">Register</a></li>
+        {% endif %}
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Flash Messages -->
+  <div class="flash-container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">
+            <span>{{ message }}</span>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+  </div>
+
+  <!-- Main View Container -->
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <p>TrustVault Security Architecture • Zero-Trust RBAC • SHA-256 Tamper-Resistant Audit Trail</p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

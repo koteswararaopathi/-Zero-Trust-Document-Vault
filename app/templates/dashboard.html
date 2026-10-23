@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}Vault Dashboard - TrustVault{% endblock %}
+
+{% block content %}
+<div class="card-header" style="border: none; padding-bottom: 0; margin-bottom: 1.5rem;">
+  <div>
+    <h1 style="font-size: 1.85rem; font-weight: 800;">Secure Document Vault</h1>
+    <p style="color: var(--text-muted); font-size: 0.95rem;">
+      Role-Based Access Control Active: <span class="badge badge-{{ user.role.lower() }}">{{ user.role }}</span>
+      {% if user.is_owner %}
+        • Full upload, delegation & revocation privileges
+      {% elif user.is_viewer %}
+        • Read-only access to granted documents
+      {% elif user.is_admin %}
+        • System administrator with audit trail oversight
+      {% endif %}
+    </p>
+  </div>
+
+  {% if user.is_admin %}
+    <a href="{{ url_for('admin.audit_logs') }}" class="btn btn-purple">
+      🛡️ Open Audit Stream
+    </a>
+  {% endif %}
+</div>
+
+<!-- Upload Section for Document Owners and Admins -->
+{% if user.is_owner or user.is_admin %}
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">
+      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+      </svg>
+      Upload Encrypted Document
+    </h2>
+  </div>
+
+  <form method="POST" action="{{ url_for('routes.upload_document') }}" enctype="multipart/form-data">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+      <div class="form-group">
+        <label class="form-label" for="doc-title">Document Title</label>
+        <input type="text" id="doc-title" name="title" class="form-control" placeholder="e.g. Q4 Financial Audit Report" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="doc-file">Select File</label>
+        <input type="file" id="doc-file" name="document" class="form-control" required>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end;">
+      <button type="submit" class="btn btn-primary" id="btn-upload">
+        🔒 Upload & Register in Ledger
+      </button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<!-- Owned Documents Section (Owner / Admin) -->
+{% if user.is_owner or user.is_admin %}
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">
+      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+      My Managed Documents ({{ owned_documents|length }})
+    </h2>
+  </div>
+
+  {% if owned_documents %}
+  <div class="table-responsive">
+    <table class="table" id="owned-docs-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Title & Filename</th>
+          <th>Size</th>
+          <th>SHA-256 Checksum</th>
+          <th>Active Grants</th>
+          <th>Created</th>
+          <th style="text-align: right;">Access Controls</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in owned_documents %}
+        <tr>
+          <td><span class="mono">#{{ doc.id }}</span></td>
+          <td>
+            <strong>{{ doc.title }}</strong><br>
+            <span style="font-size: 0.8rem; color: var(--text-dim);">{{ doc.original_filename }}</span>
+          </td>
+          <td><span class="mono">{{ doc.file_size|format_bytes }}</span></td>
+          <td>
+            <span class="hash-pill" title="Click to copy full checksum" onclick="copyToClipboard('{{ doc.file_hash }}', this)" style="cursor: pointer;">
+              {{ doc.file_hash|short_hash }}
+            </span>
+          </td>
+          <td>
+            {% set active_shares = doc.shares.filter_by(is_active=True).all() %}
+            {% if active_shares %}
+              <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+                {% for share in active_shares %}
+                  <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 0.2rem 0.5rem; border-radius: 4px;">
+                    <span style="font-size: 0.8rem; color: #34d399;">👤 {{ share.user.username }}</span>
+                    <form method="POST" action="{{ url_for('routes.revoke_document_access', doc_id=doc.id, user_id=share.user_id) }}" style="display: inline; margin-left: 0.5rem;">
+                      <button type="submit" class="btn btn-sm btn-danger" style="padding: 0.15rem 0.4rem; font-size: 0.7rem;" title="Instantly revoke access">
+                        Revoke
+                      </button>
+                    </form>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <span style="color: var(--text-dim); font-size: 0.8rem;">Private (No shares)</span>
+            {% endif %}
+          </td>
+          <td style="font-size: 0.8rem; color: var(--text-muted);">{{ doc.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td style="text-align: right;">
+            <div style="display: inline-flex; gap: 0.4rem;">
+              <a href="{{ url_for('routes.download_document', doc_id=doc.id) }}" class="btn btn-sm btn-secondary" title="Download Document">
+                ⬇️ Download
+              </a>
+              <button type="button" class="btn btn-sm btn-primary" onclick="openShareModal({{ doc.id }}, '{{ doc.title|replace('\'', '\\\'') }}')" title="Grant access to Viewer">
+                🔗 Share
+              </button>
+              <form method="POST" action="{{ url_for('routes.delete_document', doc_id=doc.id) }}" style="display: inline;" onsubmit="return confirm('Permanently delete this document and remove from disk?');">
+                <button type="submit" class="btn btn-sm btn-danger" title="Permanently Delete">
+                  🗑️
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align: center; padding: 3rem 1rem; color: var(--text-dim);">
+    <p>No documents uploaded yet. Use the upload form above to add your first secure file.</p>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Shared Documents Section (For Viewers & Admins) -->
+{% if user.is_viewer or user.is_admin %}
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">
+      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/>
+      </svg>
+      Documents Shared With You ({{ shared_documents|length }})
+    </h2>
+  </div>
+
+  {% if shared_documents %}
+  <div class="table-responsive">
+    <table class="table" id="shared-docs-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Title & Filename</th>
+          <th>Owner</th>
+          <th>Size</th>
+          <th>Checksum</th>
+          <th style="text-align: right;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in shared_documents %}
+        <tr>
+          <td><span class="mono">#{{ doc.id }}</span></td>
+          <td>
+            <strong>{{ doc.title }}</strong><br>
+            <span style="font-size: 0.8rem; color: var(--text-dim);">{{ doc.original_filename }}</span>
+          </td>
+          <td>
+            <span class="badge badge-owner">{{ doc.owner.username }}</span>
+          </td>
+          <td><span class="mono">{{ doc.file_size|format_bytes }}</span></td>
+          <td>
+            <span class="hash-pill" title="Click to copy full checksum" onclick="copyToClipboard('{{ doc.file_hash }}', this)" style="cursor: pointer;">
+              {{ doc.file_hash|short_hash }}
+            </span>
+          </td>
+          <td style="text-align: right;">
+            <a href="{{ url_for('routes.download_document', doc_id=doc.id) }}" class="btn btn-sm btn-primary">
+              ⬇️ Download Secure File
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align: center; padding: 3rem 1rem; color: var(--text-dim);">
+    <p>No documents have been shared with your account yet.</p>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Share Access Modal -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal-content">
+    <div class="card-header" style="margin-bottom: 1rem;">
+      <h3 class="card-title" style="font-size: 1.15rem;">Grant Access: <span id="shareModalDocTitle" style="color: var(--accent-cyan);"></span></h3>
+      <button type="button" onclick="closeShareModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer;">✕</button>
+    </div>
+
+    <form method="POST" id="shareForm" action="">
+      <input type="hidden" id="shareModalDocId" name="doc_id">
+
+      <div class="form-group">
+        <label class="form-label" for="share-user-select">Select Viewer</label>
+        {% if viewers_list %}
+          <select id="share-user-select" name="user_id" class="form-control" required>
+            {% for v in viewers_list %}
+              <option value="{{ v.id }}">{{ v.username }} ({{ v.email }})</option>
+            {% endfor %}
+          </select>
+        {% else %}
+          <p style="color: var(--accent-amber); font-size: 0.85rem; margin-bottom: 0.5rem;">No registered viewers found. Enter username manually:</p>
+          <input type="text" name="username" class="form-control" placeholder="Viewer username" required>
+        {% endif %}
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
+        <button type="button" class="btn btn-secondary" onclick="closeShareModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Authorize Access Grant</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
