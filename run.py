@@ -65,6 +65,15 @@ def seed_database():
         check = verify_audit_integrity()
         print(f"[SEED] Audit Chain Status: {check.get('status')} ({check.get('count', 0)} entries)")
 
+# Ensure tables and initial seeds exist on startup (works with both Gunicorn and flask run)
+with app.app_context():
+    try:
+        db.create_all()
+        if User.query.count() == 0:
+            seed_database()
+    except Exception as e:
+        print(f"[INIT] DB initialization note: {e}")
+
 @app.cli.command("seed-db")
 def seed_db_command():
     """Seeds demo users and documents."""
@@ -79,9 +88,5 @@ def verify_audit_command():
         print(res)
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        # Seed if empty
-        if User.query.count() == 0:
-            seed_database()
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
