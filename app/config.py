@@ -2,6 +2,13 @@ import os
 
 BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
+IS_PROD_DEPLOYMENT = (
+    os.environ.get('RENDER') == 'true'
+    or os.environ.get('VERCEL') == '1'
+    or os.environ.get('FLASK_ENV') == 'production'
+    or os.environ.get('ENVIRONMENT') == 'production'
+)
+
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'trustvault-super-secure-production-key-2026')
     
@@ -20,8 +27,15 @@ class Config:
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB limit
+
+    # Session cookie configuration:
+    # In production HTTPS (Render, Vercel), SameSite=None and Secure=True allows both same-origin
+    # and cross-origin authentication requests (e.g., Vercel frontend <-> Render backend).
+    # On localhost HTTP, SameSite=Lax and Secure=False allows standard browser cookies.
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', '1' if IS_PROD_DEPLOYMENT else '0') == '1'
+    SESSION_COOKIE_SAMESITE = os.environ.get('SESSION_COOKIE_SAMESITE', 'None' if IS_PROD_DEPLOYMENT else 'Lax')
+    
     # Security headers
     WTF_CSRF_ENABLED = True
 

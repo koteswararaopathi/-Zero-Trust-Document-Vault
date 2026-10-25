@@ -1,5 +1,7 @@
 import os
 from flask import Flask, render_template, jsonify, request
+from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_cors import CORS
 from app.config import Config
 from app.models import db, User, RoleEnum
 from app.rbac import get_current_user
@@ -8,8 +10,47 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # Trust standard proxy headers for reverse proxies (Render, Vercel, Cloudflare)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
     # Initialize extensions
     db.init_app(app)
+    CORS(app, supports_credentials=True, origins=r".*")
+
+    # Explicit preflight OPTIONS request handler for seamless cross-origin requests
+    @app.before_request
+    def handle_options_preflight():
+        if request.method == 'OPTIONS':
+            res = app.make_default_options_response()
+            origin = request.headers.get('Origin')
+            if origin:
+                res.headers['Access-Control-Allow-Origin'] = origin
+                res.headers['Access-Control-Allow-Credentials'] = 'true'
+                res.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD'
+                res.headers['Access-Control-Allow-Headers'] = request.headers.get(
+                    'Access-Control-Request-Headers',
+                    'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cookie, X-CSRFToken'
+                )
+                res.headers['Access-Control-Max-Age'] = '86400'
+            return res
+
+    # Guaranteed CORS headers on all responses (including 401/403/500 errors)
+    @app.after_request
+    def apply_cors_headers(response):
+        origin = request.headers.get('Origin')
+        if origin:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cookie, X-CSRFToken'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Disposition, Content-Type, Content-Length'
+            vary = response.headers.get('Vary')
+            if vary:
+                if 'Origin' not in vary:
+                    response.headers['Vary'] = f"{vary}, Origin"
+            else:
+                response.headers['Vary'] = 'Origin'
+        return response
 
     # Ensure upload folder exists
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)

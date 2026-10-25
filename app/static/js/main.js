@@ -50,8 +50,10 @@ async function runLiveVerification(button) {
   try {
     const response = await fetch('/admin/verify-audit', {
       method: 'POST',
+      credentials: 'include',
       headers: {
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
       }
     });
 
